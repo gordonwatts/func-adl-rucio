@@ -1,0 +1,2 @@
+pika>=1.0.0
+https://github.com/gordonwatts/ruciopylib/releases/download/1.0.0-alpha.1/ruciopylib-1.0.0a1-py3-none-any.whl
