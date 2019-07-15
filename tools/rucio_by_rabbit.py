@@ -48,14 +48,17 @@ def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
 
     ds_name = parsed_url.netloc
     # TODO: This file// is an illegal URL. It actually should be ///, but EventDataSet can't handle that for now.
+    logging.info(f'Starting download of {ds_name}.')
     status,files = datasets.download_ds(ds_name, do_download=True, log_func=lambda l: logging.info(l))
     # prefix='file:////data/', 
-    logging.info(f'Results from download: {status} - {files}')
+    logging.info(f'Results from download of {ds_name}: {status} - {files}')
 
     if status == DatasetQueryStatus.does_not_exist:
         # TODO: Clearly this is not acceptable.
         return []
     elif status == DatasetQueryStatus.results_valid:
+        if files is None:
+            raise BaseException('Valid results came back with None for the list of files. Not allowed! Programming error!')
         return files
     else:
         raise BaseException("Do not know what the status means!")
@@ -77,10 +80,10 @@ def listen_to_queue(dataset_location:str, rabbit_node:str, rabbit_user:str, rabb
     channel = connection.channel()
     channel.queue_declare(queue='find_did')
     channel.queue_declare(queue='parse_cpp')
-
     channel.basic_consume(queue='find_did', on_message_callback=process_message, auto_ack=False)
 
     # We are setup. Off we go. We'll never come back.
+    logging.info('Starting message consumption')
     channel.start_consuming()
 
 if __name__ == '__main__':
