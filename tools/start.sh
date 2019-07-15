@@ -15,8 +15,12 @@ cert_pass=$7
 # Get the certificate manager up and running
 export GRID_VOMS=$rucio_voms
 export GRID_PASSWORD=$cert_pass
-export RUCIO_USER=$rucio_username
+export RUCIO_ACCOUNT=$rucio_username
 
-python3 cert_manager.py
+python3 cert_manager.py &
+
+# Give the system a chance to grab the first cert so we don't go into backoff mode.
+sleep 15
 
 # Next, get the rabbit mq powered downloader up and going.
+python3 rucio_by_rabbit.py $diskloc $rabbitmq_addr $rabbitmq_user $rabbitmq_pass
