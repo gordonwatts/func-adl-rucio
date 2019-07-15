@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip3 install -r requirements.txt 
 
 # Get the runner in
-COPY tools/*.py ./
+COPY tools/* ./
 
 # And running it:
-ENTRYPOINT ["python3", "func-adl-rucio-mq.py"]
+ENTRYPOINT ["/bin/bash", "start.sh"]
