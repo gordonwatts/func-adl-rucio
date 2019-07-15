@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip3 install -r requirements.txt 
 
 # Get the runner in
-COPY tools/func-adl-rucio-mq.py .
+COPY tools/*.py ./
 
 # And running it:
-ENTRYPOINT ["python36", "func-adl-rucio-mq.py"]
+ENTRYPOINT ["python3", "func-adl-rucio-mq.py"]
