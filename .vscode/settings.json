@@ -4,6 +4,7 @@
         "chmod",
         "globus",
         "gridds",
+        "localds",
         "rucio",
         "ruciopylib",
         "shutil"
