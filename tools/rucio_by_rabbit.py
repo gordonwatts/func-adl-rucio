@@ -14,6 +14,9 @@ import os
 import logging
 import asyncio
 
+async def chained_identity(a):
+    return a
+
 def process_message(ch, method, properties, body):
     # The body contains the ast, in pickle format.
     # TODO: errors! Errors! Errors!
@@ -27,9 +30,11 @@ def process_message(ch, method, properties, body):
 
     # Next, lets look at it and process the files.
     ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'downloading'}))
-    new_ast_async = gridds.use_executor_dataset_resolver(a, chained_executor=lambda a: a)
+    new_ast_async = gridds.use_executor_dataset_resolver(a, chained_executor=chained_identity)
+
     loop = asyncio.get_event_loop()
     new_ast = loop.run_until_complete(new_ast_async)
+
     ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'done_downloading'}))
 
     # Pickle the converted AST back up, and send it down the line.
@@ -50,7 +55,7 @@ def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
     # TODO: This file// is an illegal URL. It actually should be ///, but EventDataSet can't handle that for now.
     logging.info(f'Starting download of {ds_name}.')
     status,files = datasets.download_ds(ds_name, do_download=True, log_func=lambda l: logging.info(l))
-    # prefix='file:////data/', 
+    files = [f'file:///data/{f}' for f in files]
     logging.info(f'Results from download of {ds_name}: {status} - {files}')
 
     if status == DatasetQueryStatus.does_not_exist:
