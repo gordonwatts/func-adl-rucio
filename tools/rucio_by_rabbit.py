@@ -83,6 +83,10 @@ def listen_to_queue(dataset_location:str, rabbit_node:str, rabbit_user:str, rabb
     credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
     connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbit_node, credentials=credentials))
     channel = connection.channel()
+    # We run pretty slowly, so make sure this guy doesn't keep too many.
+    channel.basic_qos(prefetch_count=1)
+
+    # Get the queues going
     channel.queue_declare(queue='find_did')
     channel.queue_declare(queue='parse_cpp')
     channel.basic_consume(queue='find_did', on_message_callback=process_message, auto_ack=False)
