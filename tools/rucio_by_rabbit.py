@@ -58,10 +58,10 @@ def process_message(ch, method, properties, body, connection):
     '''This has to execute very fast so we can make sure we do not cause a block and
     make the heartbeat fail.
     '''
-    logging.info('starting processing of message')
+    logging.debug('starting processing of message')
     t = threading.Thread(target=run_download_work, args=(ch, method, properties, body, connection))
     t.start()
-    logging.info('started processing of message')
+    logging.debug('started processing of message')
 
 def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
     'Called when we are dealing with a local_ds scheme. We basically sit here and wait'
