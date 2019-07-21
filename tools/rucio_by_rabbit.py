@@ -114,7 +114,7 @@ def listen_to_queue(dataset_location:str, rabbit_node:str, rabbit_user:str, rabb
     channel.start_consuming()
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     bad_args = len(sys.argv) != 5
     if bad_args:
         print ("Usage: python download_did_rabbit.py <dataset-cache-location> <rabbit-mq-node-address> <username> <password>")
