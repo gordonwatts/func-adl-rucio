@@ -13,40 +13,55 @@ import base64
 import os
 import logging
 import asyncio
+import threading
 
 async def chained_identity(a):
     return a
 
-def process_message(ch, method, properties, body):
+def run_download_work(ch, method, properties, body, connection):
     # The body contains the ast, in pickle format.
     # TODO: errors! Errors! Errors!
+    logging.debug('Starting thread callback')
     info = json.loads(body)
     hash = info['hash']
     a = pickle.loads(base64.b64decode(info['ast']))
     if a is None or not isinstance(a, ast.AST):
         print (f"Body of message wasn't of type AST: {a}")
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
         return
 
+    # Make sure there is an event loop running in this thread.
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     # Next, lets look at it and process the files.
-    ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'downloading'}))
+    connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'downloading'})))
     new_ast_async = gridds.use_executor_dataset_resolver(a, chained_executor=chained_identity)
 
     loop = asyncio.get_event_loop()
     new_ast = loop.run_until_complete(new_ast_async)
 
-    ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'done_downloading'}))
+    connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'done_downloading'})))
 
     # Pickle the converted AST back up, and send it down the line.
     new_info = {
         'hash': hash,
         'ast': base64.b64encode(pickle.dumps(new_ast)).decode(),
     }
-    ch.basic_publish(exchange='', routing_key='parse_cpp', body=json.dumps(new_info))
+    connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='parse_cpp', body=json.dumps(new_info)))
 
     # We are done with the download and we've sent the message on. Time to ask it so
     # we don't try to do it again.
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+    connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
+    logging.info('Done processing of message')
+
+def process_message(ch, method, properties, body, connection):
+    '''This has to execute very fast so we can make sure we do not cause a block and
+    make the heartbeat fail.
+    '''
+    logging.info('starting processing of message')
+    t = threading.Thread(target=run_download_work, args=(ch, method, properties, body, connection))
+    t.start()
+    logging.info('started processing of message')
 
 def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
     'Called when we are dealing with a local_ds scheme. We basically sit here and wait'
@@ -89,14 +104,17 @@ def listen_to_queue(dataset_location:str, rabbit_node:str, rabbit_user:str, rabb
     # Get the queues going
     channel.queue_declare(queue='find_did')
     channel.queue_declare(queue='parse_cpp')
-    channel.basic_consume(queue='find_did', on_message_callback=process_message, auto_ack=False)
+    channel.basic_consume(queue='find_did', 
+        on_message_callback=lambda ch, method, properties, body: process_message(ch, method, properties, body, connection),
+        auto_ack=False
+        )
 
     # We are setup. Off we go. We'll never come back.
     logging.info('Starting message consumption')
     channel.start_consuming()
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     bad_args = len(sys.argv) != 5
     if bad_args:
         print ("Usage: python download_did_rabbit.py <dataset-cache-location> <rabbit-mq-node-address> <username> <password>")
