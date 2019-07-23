@@ -15,6 +15,11 @@ import logging
 import asyncio
 import threading
 
+class RucioNoSuchDataset(BaseException):
+    'Thrown if we cannot find a dataset'
+    def __init__ (self, msg):
+        BaseException.__init__(self, msg)
+
 async def chained_identity(a):
     return a
 
@@ -26,8 +31,12 @@ def run_download_work(ch, method, properties, body, connection):
     hash = info['hash']
     a = pickle.loads(base64.b64decode(info['ast']))
     if a is None or not isinstance(a, ast.AST):
-        print (f"Body of message wasn't of type AST: {a}")
+        # This is an internal error. Dead letterbox this message. Send the crash report and clear it from the queue.
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'crashed'})))
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='crashed_request',
+            body=json.dumps({'hash':hash, 'message':'while downloading a dataset via rucio', 'log': [f"Body of message wasn't of type AST: {a}"]})))
         connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
+        logging.info('Done processing message with an error - we did not get an AST')
         return
 
     # Make sure there is an event loop running in this thread.
@@ -35,13 +44,21 @@ def run_download_work(ch, method, properties, body, connection):
 
     # Next, lets look at it and process the files.
     connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'downloading'})))
-    new_ast_async = gridds.use_executor_dataset_resolver(a, chained_executor=chained_identity)
-
-    loop = asyncio.get_event_loop()
-    new_ast = loop.run_until_complete(new_ast_async)
-
-    connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'done_downloading'})))
-
+    try:
+        new_ast_async = gridds.use_executor_dataset_resolver(a, chained_executor=chained_identity)
+        loop = asyncio.get_event_loop()
+        new_ast = loop.run_until_complete(new_ast_async)
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'done_downloading'})))
+    except BaseException as e:
+        # Ouch. Ok - this crashed for some reason. Better report it.
+        logging.info(f'Failed to download dataset with error: {str(e)}.')
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'crashed'})))
+        msg_data = json.dumps({'hash':hash, 'message':'while downloading a dataset via rucio', 'log': [f'Failed to download dataset:', f'  {str(e)}']})
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='crashed_request',
+            body=msg_data))
+        connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
+        return
+        
     # Pickle the converted AST back up, and send it down the line.
     new_info = {
         'hash': hash,
@@ -52,7 +69,7 @@ def run_download_work(ch, method, properties, body, connection):
     # We are done with the download and we've sent the message on. Time to ask it so
     # we don't try to do it again.
     connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
-    logging.info('Done processing of message')
+    logging.info('Done successful processing of message')
 
 def process_message(ch, method, properties, body, connection):
     '''This has to execute very fast so we can make sure we do not cause a block and
@@ -70,15 +87,14 @@ def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
     # TODO: This file// is an illegal URL. It actually should be ///, but EventDataSet can't handle that for now.
     logging.info(f'Starting download of {ds_name}.')
     status,files = datasets.download_ds(ds_name, do_download=True, log_func=lambda l: logging.info(l))
-    files = [f'file:///data/{f}' for f in files]
     logging.info(f'Results from download of {ds_name}: {status} - {files}')
 
     if status == DatasetQueryStatus.does_not_exist:
-        # TODO: Clearly this is not acceptable.
-        return []
+        raise RucioNoSuchDataset(f'The dataset {ds_name} could not be found by rucio.')
     elif status == DatasetQueryStatus.results_valid:
         if files is None:
             raise BaseException('Valid results came back with None for the list of files. Not allowed! Programming error!')
+        files = [f'file:///data/{f}' for f in files]
         return files
     else:
         raise BaseException("Do not know what the status means!")
