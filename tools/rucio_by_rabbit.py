@@ -14,6 +14,7 @@ import os
 import logging
 import asyncio
 import threading
+import inspect
 
 class RucioNoSuchDataset(BaseException):
     'Thrown if we cannot find a dataset'
@@ -53,7 +54,9 @@ def run_download_work(ch, method, properties, body, connection):
         # Ouch. Ok - this crashed for some reason. Better report it.
         logging.info(f'Failed to download dataset with error: {str(e)}.')
         connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'crashed'})))
-        msg_data = json.dumps({'hash':hash, 'message':'while downloading a dataset via rucio', 'log': [f'Failed to download dataset:', f'  {str(e)}']})
+        frame = inspect.trace()[-1]
+        where_raised = f'Exception raised in function {frame[3]} ({frame[1]}:{frame[2]}).'
+        msg_data = json.dumps({'hash':hash, 'message':'while downloading a dataset via rucio', 'log': [f'Failed to download dataset:', f'  {str(e)}', f'  {where_raised}']})
         connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='crashed_request',
             body=msg_data))
         connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
