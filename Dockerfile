@@ -12,5 +12,9 @@ RUN pip3 install -r requirements.txt
 # Get the runner in
 COPY tools/* ./
 
+# Turn this on so that stdout isn't buffered - otherwise logs in kubectl don't
+# show up until much later!
+ENV PYTHONUNBUFFERED=1
+
 # And running it:
 ENTRYPOINT ["/bin/bash", "start.sh"]
