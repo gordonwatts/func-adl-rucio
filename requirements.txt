@@ -1,4 +1,4 @@
 pika>=1.0.0
 https://github.com/gordonwatts/ruciopylib/releases/download/1.0.0-alpha.5/ruciopylib-1.0.0a5-py3-none-any.whl
-https://github.com/gordonwatts/functional_adl/releases/download/1.0.0-alpha.6/functional_adl-1.0.0a6-py3-none-any.whl
+https://github.com/gordonwatts/functional_adl/releases/download/1.0.0-alpha.9/functional_adl-1.0.0a9-py3-none-any.whl
 retry>=0.9.2
