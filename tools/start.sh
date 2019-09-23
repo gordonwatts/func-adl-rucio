@@ -13,9 +13,9 @@ rucio_voms=$6
 cert_pass=$7
 
 # Get the certificate manager up and running
-export GRID_VOMS=$rucio_voms
-export GRID_PASSWORD=$cert_pass
-export RUCIO_ACCOUNT=$rucio_username
+export GRID_VOMS=${!rucio_voms:=$rucio_voms}
+export GRID_PASSWORD=${!cert_pass:=$cert_pass}
+export RUCIO_ACCOUNT=${!rucio_username:=$rucio_username}
 
 python3 cert_manager.py &
 
