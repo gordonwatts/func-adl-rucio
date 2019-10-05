@@ -1,12 +1,14 @@
 {
     "cSpell.words": [
         "asyncio",
+        "cacheds",
         "chmod",
         "globus",
         "gridds",
         "localds",
         "rucio",
         "ruciopylib",
-        "shutil"
+        "shutil",
+        "xcache"
     ]
 }

@@ -102,7 +102,26 @@ def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
     else:
         raise BaseException("Do not know what the status means!")
 
-def listen_to_queue(dataset_location:str, rabbit_node:str, rabbit_user:str, rabbit_pass:str):
+def resolve_cached_ds(parsed_url, url:str, datasets:rucio_cache_interface, xcache_node):
+    'Called when we are dealing with a local_ds scheme. We basically sit here and wait'
+
+    ds_name = parsed_url.netloc
+    # TODO: This file// is an illegal URL. It actually should be ///, but EventDataSet can't handle that for now.
+    logging.info(f'Starting download of {ds_name}.')
+    status,files = datasets.get_ds_contents (ds_name, log_func=lambda l: logging.info(l))
+    logging.info(f'Results from download of {ds_name}: {status} - {files}')
+
+    if status == DatasetQueryStatus.does_not_exist:
+        raise RucioNoSuchDataset(f'The dataset {ds_name} could not be found by rucio.')
+    elif status == DatasetQueryStatus.results_valid:
+        if files is None:
+            raise BaseException('Valid results came back with None for the list of files. Not allowed! Programming error!')
+        files = [f'root://{xcache_node}//atlas/rucio/{f}' for f in files]
+        return files
+    else:
+        raise BaseException("Do not know what the status means!")
+
+def listen_to_queue(dataset_location:str, xcache_node:str rabbit_node:str, rabbit_user:str, rabbit_pass:str):
     'Download and pass on datasets as we see them'
 
     # Where we will store everything
@@ -110,6 +129,7 @@ def listen_to_queue(dataset_location:str, rabbit_node:str, rabbit_user:str, rabb
 
     # Config the scanner
     gridds.resolve_callbacks['localds'] = lambda parsed_url, url: download_ds(parsed_url, url, datasets)
+    gridds.resolve_callbacks['cacheds'] = lambda parsed_url, url: resolve_cached_ds(parsed_url, url, datasets, xcache_node)
 
     # Connect and setup the queues we will listen to and push once we've done.
     if rabbit_pass in os.environ:
@@ -136,6 +156,6 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     bad_args = len(sys.argv) != 5
     if bad_args:
-        print ("Usage: python download_did_rabbit.py <dataset-cache-location> <rabbit-mq-node-address> <username> <password>")
+        print ("Usage: python download_did_rabbit.py <dataset-cache-location> <xcache-node> <rabbit-mq-node-address> <username> <password>")
     else:
-        listen_to_queue (sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+        listen_to_queue (sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
