@@ -7,7 +7,6 @@ import pika
 import sys
 import ast
 import pickle
-from time import sleep
 import json
 import base64
 import os
@@ -16,13 +15,16 @@ import asyncio
 import threading
 import inspect
 
+
 class RucioNoSuchDataset(BaseException):
     'Thrown if we cannot find a dataset'
-    def __init__ (self, msg):
+    def __init__(self, msg):
         BaseException.__init__(self, msg)
+
 
 async def chained_identity(a):
     return a
+
 
 def run_download_work(ch, method, properties, body, connection):
     # The body contains the ast, in pickle format.
@@ -33,9 +35,9 @@ def run_download_work(ch, method, properties, body, connection):
     a = pickle.loads(base64.b64decode(info['ast']))
     if a is None or not isinstance(a, ast.AST):
         # This is an internal error. Dead letterbox this message. Send the crash report and clear it from the queue.
-        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'crashed'})))
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash': hash, 'phase': 'crashed'})))
         connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='crashed_request',
-            body=json.dumps({'hash':hash, 'message':'while downloading a dataset via rucio', 'log': [f"Body of message wasn't of type AST: {a}"]})))
+                                           body=json.dumps({'hash': hash, 'message': 'while downloading a dataset via rucio', 'log': [f"Body of message wasn't of type AST: {a}"]})))
         connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
         logging.info('Done processing message with an error - we did not get an AST')
         return
@@ -44,24 +46,24 @@ def run_download_work(ch, method, properties, body, connection):
     asyncio.set_event_loop(asyncio.new_event_loop())
 
     # Next, lets look at it and process the files.
-    connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'downloading'})))
+    connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash': hash, 'phase': ' downloading'})))
     try:
         new_ast_async = gridds.use_executor_dataset_resolver(a, chained_executor=chained_identity)
         loop = asyncio.get_event_loop()
         new_ast = loop.run_until_complete(new_ast_async)
-        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'done_downloading'})))
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash': hash, 'phase': 'done_downloading'})))
     except BaseException as e:
         # Ouch. Ok - this crashed for some reason. Better report it.
         logging.info(f'Failed to download dataset with error: {str(e)}.')
-        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash':hash, 'phase':'crashed'})))
+        connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='status_change_state', body=json.dumps({'hash': hash, 'phase': 'crashed'})))
         frame = inspect.trace()[-1]
         where_raised = f'Exception raised in function {frame[3]} ({frame[1]}:{frame[2]}).'
-        msg_data = json.dumps({'hash':hash, 'message':'while downloading a dataset via rucio', 'log': [f'Failed to download dataset:', f'  {str(e)}', f'  {where_raised}']})
+        msg_data = json.dumps({'hash': hash, 'message': 'while downloading a dataset via rucio', 'log': [f'Failed to download dataset:', f'  {str(e)}', f'  {where_raised}']})
         connection.add_callback_threadsafe(lambda: ch.basic_publish(exchange='', routing_key='crashed_request',
-            body=msg_data))
+                                           body=msg_data))
         connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
         return
-        
+
     # Pickle the converted AST back up, and send it down the line.
     new_info = {
         'hash': hash,
@@ -74,6 +76,7 @@ def run_download_work(ch, method, properties, body, connection):
     connection.add_callback_threadsafe(lambda: ch.basic_ack(delivery_tag=method.delivery_tag))
     logging.info('Done successful processing of message')
 
+
 def process_message(ch, method, properties, body, connection):
     '''This has to execute very fast so we can make sure we do not cause a block and
     make the heartbeat fail.
@@ -83,13 +86,14 @@ def process_message(ch, method, properties, body, connection):
     t.start()
     logging.debug('started processing of message')
 
-def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
+
+def download_ds(parsed_url, url: str, datasets: rucio_cache_interface):
     'Called when we are dealing with a local_ds scheme. We basically sit here and wait'
 
     ds_name = parsed_url.netloc
     # TODO: This file// is an illegal URL. It actually should be ///, but EventDataSet can't handle that for now.
     logging.info(f'Starting download of {ds_name}.')
-    status,files = datasets.download_ds(ds_name, do_download=True, log_func=lambda l: logging.info(l))
+    status, files = datasets.download_ds(ds_name, do_download=True, log_func=lambda l: logging.info(l))
     logging.info(f'Results from download of {ds_name}: {status} - {files}')
 
     if status == DatasetQueryStatus.does_not_exist:
@@ -102,13 +106,14 @@ def download_ds (parsed_url, url:str, datasets:rucio_cache_interface):
     else:
         raise BaseException("Do not know what the status means!")
 
-def resolve_cached_ds(parsed_url, url:str, datasets:rucio_cache_interface, xcache_node):
+
+def resolve_cached_ds(parsed_url, url: str, datasets: rucio_cache_interface, xcache_node):
     'Called when we are dealing with a local_ds scheme. We basically sit here and wait'
 
     ds_name = parsed_url.netloc
     # TODO: This file// is an illegal URL. It actually should be ///, but EventDataSet can't handle that for now.
     logging.info(f'Starting download of {ds_name}.')
-    status,files = datasets.get_ds_contents (ds_name, log_func=lambda l: logging.info(l))
+    status, files = datasets.get_ds_contents(ds_name, log_func=lambda l: logging.info(l))
     logging.info(f'Results from download of {ds_name}: {status} - {files}')
 
     if status == DatasetQueryStatus.does_not_exist:
@@ -121,7 +126,8 @@ def resolve_cached_ds(parsed_url, url:str, datasets:rucio_cache_interface, xcach
     else:
         raise BaseException("Do not know what the status means!")
 
-def listen_to_queue(dataset_location:str, xcache_node:str rabbit_node:str, rabbit_user:str, rabbit_pass:str):
+
+def listen_to_queue(dataset_location: str, xcache_node: str, rabbit_node: str, rabbit_user: str, rabbit_pass: str):
     'Download and pass on datasets as we see them'
 
     # Where we will store everything
@@ -143,19 +149,20 @@ def listen_to_queue(dataset_location:str, xcache_node:str rabbit_node:str, rabbi
     # Get the queues going
     channel.queue_declare(queue='find_did')
     channel.queue_declare(queue='parse_cpp')
-    channel.basic_consume(queue='find_did', 
-        on_message_callback=lambda ch, method, properties, body: process_message(ch, method, properties, body, connection),
-        auto_ack=False
-        )
+    channel.basic_consume(queue='find_did',
+                          on_message_callback=lambda ch, method, properties, body: process_message(ch, method, properties, body, connection),
+                          auto_ack=False
+                          )
 
     # We are setup. Off we go. We'll never come back.
     logging.info('Starting message consumption')
     channel.start_consuming()
 
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     bad_args = len(sys.argv) != 5
     if bad_args:
-        print ("Usage: python download_did_rabbit.py <dataset-cache-location> <xcache-node> <rabbit-mq-node-address> <username> <password>")
+        print("Usage: python download_did_rabbit.py <dataset-cache-location> <xcache-node> <rabbit-mq-node-address> <username> <password>")
     else:
-        listen_to_queue (sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+        listen_to_queue(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
