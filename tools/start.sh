@@ -4,13 +4,14 @@
 #  start.sh <dataset-location> <rabbit-mq-address> <rabbit-mq-username> <rabbit-mq-password> <rucio-username> <rucio_voms> <cert-password>
 
 diskloc=$1
-rabbitmq_addr=$2
-rabbitmq_user=$3
-rabbitmq_pass=$4
+xcache=$2
+rabbitmq_addr=$3
+rabbitmq_user=$4
+rabbitmq_pass=$5
 
-rucio_username=$5
-rucio_voms=$6
-cert_pass=$7
+rucio_username=$6
+rucio_voms=$7
+cert_pass=$8
 
 # Get the certificate manager up and running
 export GRID_VOMS=${!rucio_voms:=$rucio_voms}
@@ -23,4 +24,4 @@ python3 cert_manager.py &
 sleep 15
 
 # Next, get the rabbit mq powered downloader up and going.
-python3 rucio_by_rabbit.py $diskloc $rabbitmq_addr $rabbitmq_user $rabbitmq_pass
+python3 rucio_by_rabbit.py $diskloc $xcache $rabbitmq_addr $rabbitmq_user $rabbitmq_pass

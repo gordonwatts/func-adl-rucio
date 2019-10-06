@@ -121,8 +121,7 @@ def resolve_cached_ds(parsed_url, url: str, datasets: rucio_cache_interface, xca
     elif status == DatasetQueryStatus.results_valid:
         if files is None:
             raise BaseException('Valid results came back with None for the list of files. Not allowed! Programming error!')
-        files = [f'root://{xcache_node}//atlas/rucio/{f}' for f in files]
-        return files
+        return [f'root://{xcache_node}//atlas/rucio/{f.filename}' for f in files]
     else:
         raise BaseException("Do not know what the status means!")
 
@@ -161,7 +160,7 @@ def listen_to_queue(dataset_location: str, xcache_node: str, rabbit_node: str, r
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    bad_args = len(sys.argv) != 5
+    bad_args = len(sys.argv) != 6
     if bad_args:
         print("Usage: python download_did_rabbit.py <dataset-cache-location> <xcache-node> <rabbit-mq-node-address> <username> <password>")
     else:
