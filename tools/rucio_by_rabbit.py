@@ -1,6 +1,6 @@
 # Listen for a rabbit MQ request and download the requested files.
 # Looking at the AST, replace the datasets with the downloaded files (relative to "data").
-import adl_func_backend.dataset_resolvers.gridds as gridds
+import func_adl.xAOD.backend.dataset_resolvers.gridds as gridds
 from ruciopylib.rucio_cache_interface import DatasetQueryStatus, rucio_cache_interface
 from ruciopylib.dataset_local_cache import dataset_local_cache
 import pika
